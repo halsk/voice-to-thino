@@ -1,0 +1,10 @@
+# 一時ファイル
+tmp/
+*.wav
+*.txt
+
+# macOS
+.DS_Store
+
+# Hammerspoon
+*.log
