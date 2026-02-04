@@ -21,7 +21,7 @@ local WHISPER_PATH = os.getenv("HOME") .. "/.local/share/whisper.cpp/build/bin/w
 local WHISPER_MODEL = os.getenv("HOME") .. "/.local/share/whisper.cpp/models/ggml-small.bin"
 
 -- Gemini API設定
-local GEMINI_API_KEY = nil  -- .envファイルから読み込み（後述）
+local GEMINI_API_KEY = os.getenv("REC2THINO_GEMINI_API_KEY")  -- 環境変数から取得
 local GEMINI_MODEL = "gemini-2.0-flash"
 
 -- Obsidian設定
@@ -45,25 +45,6 @@ local processRecording  -- 前方宣言
 --------------------------------------------------------------------------------
 -- ユーティリティ関数
 --------------------------------------------------------------------------------
-
--- .envファイルから環境変数を読み込む
-local function loadEnv(path)
-    local f = io.open(path, "r")
-    if not f then return end
-    for line in f:lines() do
-        local key, value = line:match("^(%S+)%s*=%s*(.+)$")
-        if key and value then
-            if key == "GEMINI_API_KEY" then
-                GEMINI_API_KEY = value
-                print("[Voice to Thino] Loaded GEMINI_API_KEY from .env")
-            end
-        end
-    end
-    f:close()
-end
-
--- プロジェクトの.envファイルを読み込む
-loadEnv(os.getenv("HOME") .. "/Documents/workspace/voice-to-thino/.env")
 
 -- ディレクトリ作成
 local function ensureDir(path)

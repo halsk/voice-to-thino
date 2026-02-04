@@ -2,7 +2,7 @@
 
 音声メモをObsidianのThinoフォーマットで自動記録するHammerspoon設定。
 
-Shift + Command + A を長押しして話すだけで、音声が自動的に文字起こしされ、Obsidianのデイリーノートに記録されます。
+Cmd + Shift + Z を長押しして話すだけで、音声が自動的に文字起こしされ、Obsidianのデイリーノートに記録されます。
 
 ## 必要なもの
 
@@ -21,46 +21,41 @@ Shift + Command + A を長押しして話すだけで、音声が自動的に文
 # Hammerspoon と SoX をインストール
 brew install --cask hammerspoon
 brew install sox
+brew install cmake
 ```
 
 ### 2. whisper.cpp のビルド
 
 ```bash
-# リポジトリをクローン
-git clone https://github.com/ggml-org/whisper.cpp.git
-cd whisper.cpp
+# ~/.local/share 以下にクローン
+git clone https://github.com/ggml-org/whisper.cpp.git ~/.local/share/whisper.cpp
+cd ~/.local/share/whisper.cpp
 
 # ビルド (smallモデルを使用)
 make -j small
-
-# モデルをダウンロード
-./models/download-ggml-model.sh small
 ```
 
-ビルド後、以下のパスをメモしておいてください:
-- `whisper.cpp/build/bin/whisper-cli` (または `whisper.cpp/main`)
-- `whisper.cpp/models/ggml-small.bin`
-
-### 3. Gemini API Key の取得 (オプション)
+### 3. Gemini API Key の設定 (オプション)
 
 1. [Google AI Studio](https://aistudio.google.com/) にアクセス
 2. API Keyを作成
-3. キーをメモしておく
+3. `~/.zshenv` に環境変数を追加:
+
+```bash
+export REC2THINO_GEMINI_API_KEY="your-api-key-here"
+```
 
 ### 4. init.lua の設定
 
-`init.lua` ファイルを開き、以下の設定を編集してください:
+`init.lua` ファイルを開き、以下の設定を環境に合わせて編集してください:
 
 ```lua
--- ツールのパス
-local WHISPER_PATH = "/path/to/whisper.cpp/build/bin/whisper-cli"  -- whisper-cliのパス
-local WHISPER_MODEL = "/path/to/whisper.cpp/models/ggml-small.bin"  -- モデルのパス
-
--- Gemini API設定
-local GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"  -- Gemini APIキー
+-- ツールのパス (デフォルトは ~/.local/share/whisper.cpp)
+local WHISPER_PATH = os.getenv("HOME") .. "/.local/share/whisper.cpp/build/bin/whisper-cli"
+local WHISPER_MODEL = os.getenv("HOME") .. "/.local/share/whisper.cpp/models/ggml-small.bin"
 
 -- Obsidian設定
-local OBSIDIAN_VAULT_PATH = "/path/to/your/obsidian/vault"  -- Vaultのパス
+local OBSIDIAN_VAULT_PATH = os.getenv("HOME") .. "/Documents/Obsidian2"  -- Vaultのパス
 local OBSIDIAN_DAILY_DIR = "diary"  -- デイリーノートのディレクトリ
 ```
 
@@ -78,25 +73,22 @@ cp init.lua ~/.hammerspoon/init.lua
 
 ```lua
 -- Voice to Thino を読み込み
-dofile("/Users/hal/Documents/workspace/voice-to-thino/init.lua")
+dofile(os.getenv("HOME") .. "/Documents/workspace/voice-to-thino/init.lua")
 ```
 
-### 6. Hammerspoon を再読み込み
+### 6. Hammerspoon を再起動
 
-Hammerspoonのメニューバーアイコンをクリック → "Reload Config"
-
-または、Hammerspoonコンソールで:
-```lua
-hs.reload()
-```
+環境変数を反映するため、Hammerspoonを **Quit → 再起動** してください。
 
 ## 使い方
 
-1. **Cmd + Shift + A** を長押し（0.5秒以上）→ 録音開始（音が鳴ります）
+1. **Cmd + Shift + Z** を長押し（0.5秒以上）→ 録音開始（音が鳴ります）
 2. 話し終わったらキーを離す → 録音停止
 3. 自動的に文字起こし → 校正 → Obsidianに保存
 
 保存先: `{Vault}/{DAILY_DIR}/YYYY-MM-DD.md` の `# 📝 Notes` セクション
+
+デイリーノートが存在しない場合は自動的に作成されます。
 
 ## 出力形式
 
@@ -114,7 +106,7 @@ hs.reload()
 
 ```lua
 local HOTKEY_MODS = {"cmd", "shift"}  -- 修飾キー
-local HOTKEY_KEY = "a"  -- メインキー
+local HOTKEY_KEY = "z"  -- メインキー
 local LONGPRESS_SEC = 0.5  -- 長押し判定の秒数
 ```
 
@@ -123,8 +115,7 @@ local LONGPRESS_SEC = 0.5  -- 長押し判定の秒数
 `small` モデルは精度とパフォーマンスのバランスが良いですが、より高精度な `medium` や `large` も使用できます:
 
 ```bash
-# mediumモデルをダウンロード
-cd whisper.cpp
+cd ~/.local/share/whisper.cpp
 ./models/download-ggml-model.sh medium
 ```
 
@@ -137,18 +128,17 @@ Gemini APIを使用しない場合は、`processRecording` 関数内の `refineW
 ### 録音が開始されない
 
 - Hammerspoonに「アクセシビリティ」と「マイク」の権限があるか確認
-- システム環境設定 → セキュリティとプライバシー → プライバシー
+- システム設定 → プライバシーとセキュリティ → アクセシビリティ / マイク
 
 ### 文字起こしが失敗する
 
 - Whisperのパスが正しいか確認
 - Hammerspoonコンソールでエラーメッセージを確認
 
-### Obsidianに保存されない
+### Gemini校正が動かない
 
-- デイリーノートが存在するか確認（事前に作成が必要）
-- `# 📝 Notes` セクションがあるか確認
-- パスが正しいか確認
+- 環境変数 `REC2THINO_GEMINI_API_KEY` が設定されているか確認
+- Hammerspoonを **Quit → 再起動** して環境変数を再読み込み
 
 ### ログの確認
 
