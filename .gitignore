@@ -3,6 +3,9 @@ tmp/
 *.wav
 *.txt
 
+# 環境変数
+.env
+
 # macOS
 .DS_Store
 
