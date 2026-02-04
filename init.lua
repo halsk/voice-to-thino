@@ -21,7 +21,7 @@ local WHISPER_PATH = os.getenv("HOME") .. "/.local/share/whisper.cpp/build/bin/w
 local WHISPER_MODEL = os.getenv("HOME") .. "/.local/share/whisper.cpp/models/ggml-small.bin"
 
 -- Gemini API設定
-local GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"
+local GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "YOUR_GEMINI_API_KEY"  -- 環境変数 GEMINI_API_KEY から取得
 local GEMINI_MODEL = "gemini-2.0-flash"
 
 -- Obsidian設定
