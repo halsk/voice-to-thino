@@ -2,7 +2,7 @@
 
 音声メモをObsidianのThinoフォーマットで自動記録するHammerspoon設定。
 
-Cmd + Shift + Z を長押しして話すだけで、音声が自動的に文字起こしされ、Obsidianのデイリーノートに記録されます。
+Cmd + Ctrl + Z を長押しして話すだけで、音声が自動的に文字起こしされ、Obsidianのデイリーノートに記録されます。
 
 ## 必要なもの
 
@@ -82,7 +82,7 @@ dofile(os.getenv("HOME") .. "/Documents/workspace/voice-to-thino/init.lua")
 
 ## 使い方
 
-1. **Cmd + Shift + Z** を長押し（0.5秒以上）→ 録音開始（音が鳴ります）
+1. **Cmd + Ctrl + Z** を長押し（0.5秒以上）→ 録音開始（音が鳴ります）
 2. 話し終わったらキーを離す → 録音停止
 3. 自動的に文字起こし → 校正 → Obsidianに保存
 
@@ -105,7 +105,7 @@ dofile(os.getenv("HOME") .. "/Documents/workspace/voice-to-thino/init.lua")
 ### ホットキーの変更
 
 ```lua
-local HOTKEY_MODS = {"cmd", "shift"}  -- 修飾キー
+local HOTKEY_MODS = {"cmd", "ctrl"}  -- 修飾キー
 local HOTKEY_KEY = "z"  -- メインキー
 local LONGPRESS_SEC = 0.5  -- 長押し判定の秒数
 ```

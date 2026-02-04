@@ -22,7 +22,7 @@ voice-to-thino/
 
 ## 動作フロー
 
-1. `Cmd+Shift+Z` 長押し → 録音開始
+1. `Cmd+Ctrl+Z` 長押し → 録音開始
 2. キーを離す → 録音停止
 3. Whisperで文字起こし
 4. Gemini APIで校正（オプション）
@@ -33,7 +33,7 @@ voice-to-thino/
 
 | 変数 | 説明 | デフォルト |
 |------|------|-----------|
-| `HOTKEY_MODS` | 修飾キー | `{"cmd", "shift"}` |
+| `HOTKEY_MODS` | 修飾キー | `{"cmd", "ctrl"}` |
 | `HOTKEY_KEY` | メインキー | `"z"` |
 | `LONGPRESS_SEC` | 長押し判定秒数 | `0.5` |
 | `SOX_PATH` | SoXのパス | `/opt/homebrew/bin/sox` |

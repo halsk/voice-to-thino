@@ -2,7 +2,7 @@
 -- 音声メモをObsidianのThinoフォーマットで自動記録するシステム
 --
 -- 使い方:
---   1. ホットキー（デフォルト: Cmd+Shift+A）を長押しで録音開始
+--   1. ホットキー（デフォルト: Cmd+Ctrl+Z）を長押しで録音開始
 --   2. キーを離すと録音停止
 --   3. Whisperで文字起こし → Geminiで校正 → Obsidianに追記
 
@@ -11,7 +11,7 @@
 --------------------------------------------------------------------------------
 
 -- ホットキー設定
-local HOTKEY_MODS = {"cmd", "shift"}
+local HOTKEY_MODS = {"cmd", "ctrl"}
 local HOTKEY_KEY = "z"
 local LONGPRESS_SEC = 0.5  -- 長押し判定の秒数
 
@@ -465,32 +465,35 @@ end
 -- ホットキーの登録
 --------------------------------------------------------------------------------
 
--- イベントタップを使用して押下・解放を検出
+-- 修飾キーの厳密チェック (指定した修飾キーが全て押されているか)
+local function checkMods(flags)
+    for _, mod in ipairs(HOTKEY_MODS) do
+        if not flags[mod] then
+            return false
+        end
+    end
+    return true
+end
+
+-- キーイベントタップ (keyDown / keyUp)
 local keyEventTap = hs.eventtap.new({hs.eventtap.event.types.keyDown, hs.eventtap.event.types.keyUp}, function(event)
     local keyCode = event:getKeyCode()
     local flags = event:getFlags()
     local eventType = event:getType()
-
-    -- ホットキーのキーコードを取得
     local targetKeyCode = hs.keycodes.map[HOTKEY_KEY]
 
-    -- 修飾キーのチェック
-    local modsMatch = true
-    for _, mod in ipairs(HOTKEY_MODS) do
-        if not flags[mod] then
-            modsMatch = false
-            break
-        end
-    end
-
-    if keyCode == targetKeyCode and modsMatch then
-        if eventType == hs.eventtap.event.types.keyDown then
+    if keyCode == targetKeyCode then
+        if eventType == hs.eventtap.event.types.keyDown and checkMods(flags) then
             if not keyDownTime then  -- 重複呼び出し防止
                 onKeyDown()
             end
             return true  -- イベントを消費
         elseif eventType == hs.eventtap.event.types.keyUp then
-            onKeyUp()
+            -- keyUp時は修飾キーの状態に関係なく処理する
+            -- (Zを離す前にCmd/Ctrlが離されることがある)
+            if keyDownTime then
+                onKeyUp()
+            end
             return true  -- イベントを消費
         end
     end
@@ -498,7 +501,76 @@ local keyEventTap = hs.eventtap.new({hs.eventtap.event.types.keyDown, hs.eventta
     return false
 end)
 
+-- 修飾キー変化タップ (録音中または長押し待機中に修飾キーが離された場合の安全策)
+local flagsEventTap = hs.eventtap.new({hs.eventtap.event.types.flagsChanged}, function(event)
+    if keyDownTime then
+        local flags = event:getFlags()
+        if not checkMods(flags) then
+            -- 修飾キーが離された → 録音停止 or 長押しキャンセル
+            print("[Voice to Thino] Modifier key released, cancelling/stopping")
+            onKeyUp()
+        end
+    end
+    return false
+end)
+
 keyEventTap:start()
+flagsEventTap:start()
+
+--------------------------------------------------------------------------------
+-- eventtap 生存監視 & 自動復旧
+--------------------------------------------------------------------------------
+
+local watchdogTimer = hs.timer.doEvery(30, function()
+    local keyTapRunning = keyEventTap:isEnabled()
+    local flagsTapRunning = flagsEventTap:isEnabled()
+
+    if not keyTapRunning or not flagsTapRunning then
+        print("[Voice to Thino] ⚠ eventtap stopped! Restarting...")
+        print("[Voice to Thino]   keyEventTap: " .. tostring(keyTapRunning) .. ", flagsEventTap: " .. tostring(flagsTapRunning))
+
+        if not keyTapRunning then
+            keyEventTap:start()
+        end
+        if not flagsTapRunning then
+            flagsEventTap:start()
+        end
+
+        -- 状態もリセット
+        isRecording = false
+        keyDownTime = nil
+        if longPressTimer then
+            longPressTimer:stop()
+            longPressTimer = nil
+        end
+        if recordingTask then
+            recordingTask:terminate()
+            recordingTask = nil
+        end
+
+        notify("Voice to Thino", "ホットキーを再起動しました")
+    end
+end)
+
+-- 状態スタック防止: 60秒以上 keyDownTime がセットされたままなら強制リセット
+local stateResetTimer = hs.timer.doEvery(10, function()
+    if keyDownTime then
+        local elapsed = hs.timer.secondsSinceEpoch() - keyDownTime
+        if elapsed > 60 then
+            print("[Voice to Thino] ⚠ State stuck for " .. math.floor(elapsed) .. "s, force resetting")
+            keyDownTime = nil
+            if longPressTimer then
+                longPressTimer:stop()
+                longPressTimer = nil
+            end
+            if isRecording and recordingTask then
+                recordingTask:terminate()
+                recordingTask = nil
+                isRecording = false
+            end
+        end
+    end
+end)
 
 --------------------------------------------------------------------------------
 -- 初期化完了メッセージ
@@ -506,4 +578,5 @@ keyEventTap:start()
 
 print("[Voice to Thino] Loaded successfully")
 print("[Voice to Thino] Press " .. table.concat(HOTKEY_MODS, "+") .. "+" .. HOTKEY_KEY .. " (hold) to start recording")
+print("[Voice to Thino] Watchdog timer: every 30s, state reset timer: every 10s")
 notify("Voice to Thino", "起動しました。" .. table.concat(HOTKEY_MODS, "+") .. "+" .. string.upper(HOTKEY_KEY) .. " を長押しで録音開始")
