@@ -518,9 +518,62 @@ keyEventTap:start()
 flagsEventTap:start()
 
 --------------------------------------------------------------------------------
--- eventtap 生存監視 & 自動復旧
+-- eventtap 強制リフレッシュ & スリープ復帰対応
 --------------------------------------------------------------------------------
 
+-- eventtap を強制的に再起動する関数
+local function refreshEventTaps()
+    print("[Voice to Thino] Refreshing eventtaps...")
+
+    -- 一度停止してから再開
+    keyEventTap:stop()
+    flagsEventTap:stop()
+
+    -- 少し待ってから再開
+    hs.timer.doAfter(0.1, function()
+        keyEventTap:start()
+        flagsEventTap:start()
+        print("[Voice to Thino] Eventtaps refreshed")
+    end)
+
+    -- 状態もリセット
+    isRecording = false
+    keyDownTime = nil
+    if longPressTimer then
+        longPressTimer:stop()
+        longPressTimer = nil
+    end
+    if recordingTask then
+        recordingTask:terminate()
+        recordingTask = nil
+    end
+end
+
+-- スリープ復帰時に eventtap をリフレッシュ
+local caffeinateWatcher = hs.caffeinate.watcher.new(function(event)
+    if event == hs.caffeinate.watcher.systemDidWake then
+        print("[Voice to Thino] System woke up, refreshing eventtaps...")
+        -- 少し待ってからリフレッシュ（システムが安定するのを待つ）
+        hs.timer.doAfter(2, function()
+            refreshEventTaps()
+            notify("Voice to Thino", "スリープ復帰: ホットキーを再起動しました")
+        end)
+    elseif event == hs.caffeinate.watcher.screensDidUnlock then
+        print("[Voice to Thino] Screen unlocked, refreshing eventtaps...")
+        hs.timer.doAfter(1, function()
+            refreshEventTaps()
+        end)
+    end
+end)
+caffeinateWatcher:start()
+
+-- 定期的に eventtap を強制リフレッシュ (5分ごと)
+local forceRefreshTimer = hs.timer.doEvery(300, function()
+    print("[Voice to Thino] Periodic eventtap refresh...")
+    refreshEventTaps()
+end)
+
+-- 従来の watchdog (isEnabled チェック、30秒ごと)
 local watchdogTimer = hs.timer.doEvery(30, function()
     local keyTapRunning = keyEventTap:isEnabled()
     local flagsTapRunning = flagsEventTap:isEnabled()
@@ -528,26 +581,7 @@ local watchdogTimer = hs.timer.doEvery(30, function()
     if not keyTapRunning or not flagsTapRunning then
         print("[Voice to Thino] ⚠ eventtap stopped! Restarting...")
         print("[Voice to Thino]   keyEventTap: " .. tostring(keyTapRunning) .. ", flagsEventTap: " .. tostring(flagsTapRunning))
-
-        if not keyTapRunning then
-            keyEventTap:start()
-        end
-        if not flagsTapRunning then
-            flagsEventTap:start()
-        end
-
-        -- 状態もリセット
-        isRecording = false
-        keyDownTime = nil
-        if longPressTimer then
-            longPressTimer:stop()
-            longPressTimer = nil
-        end
-        if recordingTask then
-            recordingTask:terminate()
-            recordingTask = nil
-        end
-
+        refreshEventTaps()
         notify("Voice to Thino", "ホットキーを再起動しました")
     end
 end)
@@ -578,5 +612,5 @@ end)
 
 print("[Voice to Thino] Loaded successfully")
 print("[Voice to Thino] Press " .. table.concat(HOTKEY_MODS, "+") .. "+" .. HOTKEY_KEY .. " (hold) to start recording")
-print("[Voice to Thino] Watchdog timer: every 30s, state reset timer: every 10s")
+print("[Voice to Thino] Watchdog: 30s, Force refresh: 5min, Sleep/unlock watcher: enabled")
 notify("Voice to Thino", "起動しました。" .. table.concat(HOTKEY_MODS, "+") .. "+" .. string.upper(HOTKEY_KEY) .. " を長押しで録音開始")
