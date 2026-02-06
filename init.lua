@@ -33,8 +33,12 @@ local TEMP_DIR = os.getenv("HOME") .. "/.voice-to-thino"
 local AUDIO_FILE = TEMP_DIR .. "/recording.wav"
 
 --------------------------------------------------------------------------------
--- 内部変数
+-- 内部変数 (グローバルにしてGC回避)
 --------------------------------------------------------------------------------
+
+-- ガベージコレクションで回収されないようにグローバル変数として保持
+-- 参考: https://github.com/Hammerspoon/hammerspoon/issues/3294
+VoiceToThino = VoiceToThino or {}
 
 local isRecording = false
 local recordingTask = nil
@@ -517,24 +521,29 @@ end)
 keyEventTap:start()
 flagsEventTap:start()
 
+-- グローバル変数に保持してGC回避
+VoiceToThino.keyEventTap = keyEventTap
+VoiceToThino.flagsEventTap = flagsEventTap
+
 --------------------------------------------------------------------------------
 -- eventtap 強制リフレッシュ & スリープ復帰対応
 --------------------------------------------------------------------------------
 
+-- 最後にリフレッシュした時刻を記録
+local lastRefreshTime = hs.timer.secondsSinceEpoch()
+
 -- eventtap を強制的に再起動する関数
-local function refreshEventTaps()
-    print("[Voice to Thino] Refreshing eventtaps...")
+local function refreshEventTaps(reason)
+    reason = reason or "unknown"
+    print("[Voice to Thino] Refreshing eventtaps... (reason: " .. reason .. ")")
 
     -- 一度停止してから再開
     keyEventTap:stop()
     flagsEventTap:stop()
 
-    -- 少し待ってから再開
-    hs.timer.doAfter(0.1, function()
-        keyEventTap:start()
-        flagsEventTap:start()
-        print("[Voice to Thino] Eventtaps refreshed")
-    end)
+    -- 即座に再開（タイマーを使わない）
+    keyEventTap:start()
+    flagsEventTap:start()
 
     -- 状態もリセット
     isRecording = false
@@ -547,47 +556,58 @@ local function refreshEventTaps()
         recordingTask:terminate()
         recordingTask = nil
     end
+
+    lastRefreshTime = hs.timer.secondsSinceEpoch()
+    print("[Voice to Thino] Eventtaps refreshed")
 end
 
 -- スリープ復帰時に eventtap をリフレッシュ
 local caffeinateWatcher = hs.caffeinate.watcher.new(function(event)
     if event == hs.caffeinate.watcher.systemDidWake then
-        print("[Voice to Thino] System woke up, refreshing eventtaps...")
-        -- 少し待ってからリフレッシュ（システムが安定するのを待つ）
-        hs.timer.doAfter(2, function()
-            refreshEventTaps()
-            notify("Voice to Thino", "スリープ復帰: ホットキーを再起動しました")
-        end)
+        print("[Voice to Thino] System woke up")
+        -- 即座にリフレッシュ
+        refreshEventTaps("systemDidWake")
+        notify("Voice to Thino", "スリープ復帰: ホットキーを再起動しました")
     elseif event == hs.caffeinate.watcher.screensDidUnlock then
-        print("[Voice to Thino] Screen unlocked, refreshing eventtaps...")
-        hs.timer.doAfter(1, function()
-            refreshEventTaps()
-        end)
+        print("[Voice to Thino] Screen unlocked")
+        refreshEventTaps("screensDidUnlock")
+    elseif event == hs.caffeinate.watcher.screensDidWake then
+        print("[Voice to Thino] Screens did wake")
+        refreshEventTaps("screensDidWake")
     end
 end)
 caffeinateWatcher:start()
+VoiceToThino.caffeinateWatcher = caffeinateWatcher
 
 -- 定期的に eventtap を強制リフレッシュ (5分ごと)
-local forceRefreshTimer = hs.timer.doEvery(300, function()
+VoiceToThino.forceRefreshTimer = hs.timer.doEvery(300, function()
     print("[Voice to Thino] Periodic eventtap refresh...")
-    refreshEventTaps()
+    refreshEventTaps("periodic")
 end)
 
 -- 従来の watchdog (isEnabled チェック、30秒ごと)
-local watchdogTimer = hs.timer.doEvery(30, function()
+VoiceToThino.watchdogTimer = hs.timer.doEvery(30, function()
     local keyTapRunning = keyEventTap:isEnabled()
     local flagsTapRunning = flagsEventTap:isEnabled()
 
     if not keyTapRunning or not flagsTapRunning then
         print("[Voice to Thino] ⚠ eventtap stopped! Restarting...")
         print("[Voice to Thino]   keyEventTap: " .. tostring(keyTapRunning) .. ", flagsEventTap: " .. tostring(flagsTapRunning))
-        refreshEventTaps()
+        refreshEventTaps("watchdog-disabled")
         notify("Voice to Thino", "ホットキーを再起動しました")
+    end
+
+    -- タイマーが動いていることを確認するログ（10分に1回）
+    local now = hs.timer.secondsSinceEpoch()
+    local sinceLast = now - lastRefreshTime
+    if sinceLast > 600 then
+        print("[Voice to Thino] ⚠ No refresh for " .. math.floor(sinceLast) .. "s, forcing refresh")
+        refreshEventTaps("watchdog-stale")
     end
 end)
 
 -- 状態スタック防止: 60秒以上 keyDownTime がセットされたままなら強制リセット
-local stateResetTimer = hs.timer.doEvery(10, function()
+VoiceToThino.stateResetTimer = hs.timer.doEvery(10, function()
     if keyDownTime then
         local elapsed = hs.timer.secondsSinceEpoch() - keyDownTime
         if elapsed > 60 then
