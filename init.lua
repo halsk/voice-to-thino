@@ -579,30 +579,16 @@ end)
 caffeinateWatcher:start()
 VoiceToThino.caffeinateWatcher = caffeinateWatcher
 
--- 定期的に eventtap を強制リフレッシュ (5分ごと)
-VoiceToThino.forceRefreshTimer = hs.timer.doEvery(300, function()
-    print("[Voice to Thino] Periodic eventtap refresh...")
-    refreshEventTaps("periodic")
-end)
-
--- 従来の watchdog (isEnabled チェック、30秒ごと)
-VoiceToThino.watchdogTimer = hs.timer.doEvery(30, function()
+-- watchdog: isEnabled チェックのみ (stop/startせず監視だけ、60秒ごと)
+VoiceToThino.watchdogTimer = hs.timer.doEvery(60, function()
     local keyTapRunning = keyEventTap:isEnabled()
     local flagsTapRunning = flagsEventTap:isEnabled()
 
     if not keyTapRunning or not flagsTapRunning then
-        print("[Voice to Thino] ⚠ eventtap stopped! Restarting...")
+        print("[Voice to Thino] ⚠ eventtap disabled! Restarting...")
         print("[Voice to Thino]   keyEventTap: " .. tostring(keyTapRunning) .. ", flagsEventTap: " .. tostring(flagsTapRunning))
         refreshEventTaps("watchdog-disabled")
         notify("Voice to Thino", "ホットキーを再起動しました")
-    end
-
-    -- タイマーが動いていることを確認するログ（10分に1回）
-    local now = hs.timer.secondsSinceEpoch()
-    local sinceLast = now - lastRefreshTime
-    if sinceLast > 600 then
-        print("[Voice to Thino] ⚠ No refresh for " .. math.floor(sinceLast) .. "s, forcing refresh")
-        refreshEventTaps("watchdog-stale")
     end
 end)
 
